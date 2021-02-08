@@ -1,7 +1,8 @@
 -module(aeu_ext_scripts).
 
 -export([ parse_opts/2
-        , connect_node/1 ]).
+        , connect_node/1
+        , aecore_apps/0 ]).
 
 parse_opts(Args, #{arguments := Args0} = Spec0) ->
     Spec = Spec0#{arguments => Args0 ++ node_arguments()},
@@ -53,6 +54,39 @@ name_and_mode(Opts) ->
             error({?MODULE, no_name_or_sname})
     end.
 
+deactivate_node() ->
+    ok.
+
+aecore_apps() ->
+    Apps = [{A, app_deps(A)} || {A, _, _} <- application:which_applications()],
+    aecore_apps(Apps).
+
+app_deps(A) ->
+    {ok, Ds} = application:get_key(A, applications),
+    Ds.
+
+aecore_apps(AppsDeps) ->
+    case lists:keytake(aecore, 1, AppsDeps) of
+        {value, {_, AecDeps}, Rest} ->
+            AppsDeps1 = [App || {A,_} = App <- Rest,
+                                not lists:member(A, AecDeps)],
+            transitive_deps([aecore], AppsDeps1);
+        false ->
+            []
+    end.
+
+transitive_deps(Apps, AppsDeps) ->
+    case [A || {A, Ds} <- AppsDeps,
+               intersection(Apps, Ds) =/= []] of
+        [] ->
+            Apps;
+        NewApps ->
+            transitive_deps(Apps ++ NewApps, [App || {A, _} = App <- AppsDeps,
+                                                     not lists:member(A, NewApps)])
+    end.
+
+intersection(A, B) ->
+    A -- (A -- B).
 
 connect_node(#{connect := #{name := Name, mode := Mode, cookie := Cookie,
                             target_node := TargetNode}}) ->
