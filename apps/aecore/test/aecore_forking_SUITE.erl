@@ -19,7 +19,8 @@
     sync_fork_in_wrong_order/1,
     add_dev3_node/1,
     dev3_failed_attack/1,
-    dev3_syncs_to_community/1
+    dev3_syncs_to_community/1,
+    whitelist_and_rollback/1
    ]).
 
 %% tr_ttb behavior callbacks
@@ -38,7 +39,7 @@ all() ->
 
 groups() ->
     [
-     {all_nodes, [sequence], [{group, two_nodes}, {group, three_nodes}]},
+     {all_nodes, [sequence], [{group, two_nodes}, {group, three_nodes}, {group, whitelist}]},
      {two_nodes, [sequence],
       [create_dev1_chain,
        create_dev2_chain,
@@ -46,7 +47,9 @@ groups() ->
      {three_nodes, [sequence],
       [add_dev3_node,
        dev3_failed_attack,
-       dev3_syncs_to_community]}
+       dev3_syncs_to_community]},
+     {whitelist, [sequence],
+      [whitelist_and_rollback]}
     ].
 
 suite() ->
@@ -74,6 +77,9 @@ init_per_group(two_nodes, Config) ->
 init_per_group(three_nodes, Config) ->
     [{nodes, [aecore_suite_utils:node_tuple(D) ||
                  D <- [dev1, dev2, dev3]]} | Config];
+init_per_group(whitelist, Config) ->
+    [{nodes, [aecore_suite_utils:node_tuple(dev1)]}
+    | Config];
 init_per_group(_Group, Config) ->
     Config.
 
@@ -262,6 +268,21 @@ dev3_failed_attack(Config) ->
     ct:log("Without fork resistance, N2 synced against N3", []),
     ok = stop_and_check([dev1, dev2, dev3], Config).
 
+whitelist_and_rollback(Config) ->
+    N1 = aecore_suite_utils:node_name(dev1),
+    aecore_suite_utils:start_node(dev1, Config),
+    aecore_suite_utils:connect(N1),
+    TopHeight = rpc:call(N1, aec_chain, top_height, []),
+    ct:log("TopHeight on dev1: ~p", [TopHeight]),
+    SetupHome = rpc:call(N1, setup, home, []),
+    AeCmd = filename:join([SetupHome, "bin", "aeternity"]),
+    ct:log("SetupHome = ~p", [SetupHome]),
+    ct:log("AeCmd = ~p", [AeCmd]),
+    InitArgs = rpc:call(N1, init, get_arguments, []),
+    WhiteListRes = os:cmd(AeCmd ++ " whitelist"),
+    os:cmd("WhiteListRes = ~p", [WhiteListRes]),
+    ct:log("InitArgs = ~p", [InitArgs]),
+    ok = stop_and_check([dev1], Config).
 
 dev3_syncs_to_community(_Config) ->
     %% This has not yet been implemented

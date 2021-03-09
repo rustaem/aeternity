@@ -2,6 +2,7 @@
 
 -export([ parse_opts/2
         , connect_node/1
+        , deactivate_node/0
         , aecore_apps/0 ]).
 
 parse_opts(Args, #{arguments := Args0} = Spec0) ->

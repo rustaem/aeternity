@@ -110,7 +110,8 @@
                         , node_is_micro_block/1
                         , node_header/1] ).
 
--export([rollback_chain_state_to_hash/1]).
+-export([ rollback_chain_state_to_hash/1
+        , rollback_chain_state_to_hash/2 ]).
 
 %% For tests
 -export([ get_top_block_hash/1
@@ -333,9 +334,9 @@ rollback_chain_state_to_hash_(Hash) ->
     end.
 
 do_rollback_to_hash(Hash, TopHash) ->
-    {ok, Header} = aec_db:find_header(Hash),
+    {value, Header} = aec_db:find_header(Hash),
     Height = aec_headers:height(Header),
-    {ok, TopHeader} = aec_db:find_header(TopHash),
+    {value, TopHeader} = aec_db:find_header(TopHash),
     TopHeight = aec_headers:height(TopHeader),
     SafetyMargin = 1000, %% Why not?
     [begin
@@ -344,6 +345,7 @@ do_rollback_to_hash(Hash, TopHash) ->
               ok = mnesia:delete(aec_headers, Del, write),
               ok = mnesia:delete(aec_blocks, Del, write),
               ok = mnesia:delete(aec_block_state, Del, write)
+              %% TODO: we really should also delete state tree objects
           end || T <- mnesia:index_read(aec_headers, H, height)]
      end || H <- lists:seq(Height+1, TopHeight+SafetyMargin)],
     aec_db:write_top_block_node(Hash, Header).

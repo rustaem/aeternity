@@ -16,6 +16,9 @@ args() ->
          type => int   , help => "Chain height, from which to start deleting"}
     , #{ name => hash  , short => $b, long => "-blockhash", required => false,
          type => string, help => "Keyblock hash, from which to start deleting"}
+    , #{ name => whitelist, short => $w, long => "-whitelist", required => false,
+         type => boolean, help => "Roll back based on contents of whitelist",
+         default => false }
     ].
 
 
@@ -33,15 +36,24 @@ rollback(Node, #{opts := Opts}) ->
           , enc_top_hash => EncHash },
     io:fwrite("Current top (height: ~p): ~s~n", [TopHeight, EncHash]),
     case Opts of
-        #{height := H} when H > TopHeight ->
-            abort("Specified height exceeds current top height (~p)", [TopHeight]);
-        #{height := H} ->
-            case rpc:call(Node, aec_chain, get_key_header_by_height, [H]) of
-                {ok, Hdr} ->
-                    St1 = St#{ from => #{ height => H
-                                        , header => Hdr }},
-                    do_rollback(St1, Node, Opts)
+        #{whitelist := true} ->
+            %% Should we check whether there are conflicting options?
+            %% Right now, the --whitelist option takes precedence.
+            Whitelist = rpc:call(Node, aec_consensus_bitcoin_ng, get_whitelist, []),
+            case map_size(Whitelist) of
+                0 ->
+                    abort("No whitelist loaded");
+                _ ->
+                    case whitelisted_starting_point(Node, Whitelist, TopHeight) of
+                        undefined ->
+                            abort("Could not rollback from whitelist", []);
+                        {H, Hdr} ->
+                            do_rollback(St#{from => #{ height => H
+                                                     , header => Hdr }}, Node, Opts)
+                    end
             end;
+        #{height := H} ->
+            do_rollback(state_at_height(Node, H, St), Node, Opts);
         #{hash := Hash} ->
             case aeser_api_encoder:safe_decode(key_block_hash, Hash) of
                 {error, _} ->
@@ -65,10 +77,17 @@ rollback(Node, #{opts := Opts}) ->
             end
     end.
 
-do_rollback(Spec, _Node, _Opts) ->
-    io:fwrite("Would rollback: ~p~n", [Spec]),
-    ok.
+do_rollback(Spec, Node, _Opts) ->
+    #{ from := #{ height := Height }} = Spec,
+    io:fwrite("Will rollback: ~p~n", [Spec]),
+    Res = rpc:call(Node, aec_consensus_bitcoin_ng, rollback, [Height]),
+    io:fwrite(standard_io, "Rollback to height ~p complete~n", [Height]).
 
+state_at_height(_Node, H, #{ top_height := TopHeight }) when H > TopHeight ->
+    abort("Rollback height (~p) exceeds current top height (~p)", [H, TopHeight]);
+state_at_height(Node, H, St) ->
+    St1 = St#{ from => #{ height => H
+                        , header => header_by_height(Node, H) }}.
 
 abort(Str) ->
     abort(Str, []).
@@ -76,3 +95,33 @@ abort(Str) ->
 abort(Str, Args) ->
     io:fwrite(standard_error, Str ++ "~n", Args),
     halt(1).
+
+%% We want to find start either from the highest whitelisted height where
+%% the hashes actually match, or the height right below the lowest whitelisted
+%% height.
+%%
+whitelisted_starting_point(Node, W, TopHeight) ->
+    Sorted = lists:keysort(maps:to_list(W)),
+    whitelisted_starting_point_(Sorted, Node, TopHeight, undefined).
+
+whitelisted_starting_point_([{H, Hash}|T], Node, TopHeight, Sofar) when H < TopHeight ->
+    Hdr = header_by_height(H),
+    case aec_headers:hash_header(Hdr) of
+        {ok, Hash} ->
+            whitelisted_starting_point(T, Node, TopHeight, {H, Hdr});
+        _ when Sofar == undefined ->
+            PrevH = H - 1,
+            {PrevH, header_by_height(Node, PrevH)};
+        _ ->
+            Sofar
+    end;
+whitelisted_starting_point_(_, _, _, Sofar) ->
+    Sofar.
+
+header_by_height(Node, H) ->
+    case rpc:call(Node, aec_chain, get_key_header_by_height, [H]) of
+        {ok, Hdr} ->
+            Hdr;
+        _ ->
+            abort("Could not fetch header at height ~p", [H])
+    end.
