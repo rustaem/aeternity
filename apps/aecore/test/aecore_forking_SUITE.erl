@@ -279,7 +279,9 @@ whitelist_and_rollback(Config) ->
     ct:log("SetupHome = ~p", [SetupHome]),
     ct:log("AeCmd = ~p", [AeCmd]),
     InitArgs = rpc:call(N1, init, get_arguments, []),
-    WhiteListRes = os:cmd(AeCmd ++ " whitelist"),
+    WLCmd = AeCmd ++ " create_whitelist -start 5 -n 10 -o wl.json",
+    ct:log("WLCmd = ~p", [WLCmd]),
+    WhiteListRes = os:cmd(WLCmd, #{}),
     os:cmd("WhiteListRes = ~p", [WhiteListRes]),
     ct:log("InitArgs = ~p", [InitArgs]),
     ok = stop_and_check([dev1], Config).
