@@ -3,6 +3,7 @@
 -export([ parse_opts/2
         , connect_node/1
         , deactivate_node/0
+        , activate_node/1
         , aecore_apps/0 ]).
 
 parse_opts(Args, #{arguments := Args0} = Spec0) ->
@@ -56,6 +57,13 @@ name_and_mode(Opts) ->
     end.
 
 deactivate_node() ->
+    Apps = aecore_apps(),
+    [ok = application:stop(A) || A <- Apps],
+    Apps.
+
+activate_node(Apps) ->
+    application:ensure_all_started(aecore),
+    [ok = application:ensure_started(A) || A <- Apps],
     ok.
 
 aecore_apps() ->

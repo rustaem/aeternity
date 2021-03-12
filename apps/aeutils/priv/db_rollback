@@ -80,14 +80,18 @@ rollback(Node, #{opts := Opts}) ->
 do_rollback(Spec, Node, _Opts) ->
     #{ from := #{ height := Height }} = Spec,
     io:fwrite("Will rollback: ~p~n", [Spec]),
+    Apps = rpc:call(Node, aeu_ext_scripts, deactivate_node, []),
+    io:fwrite(standard_io, "Stopped apps: ~p~n", [Apps]),
     Res = rpc:call(Node, aec_consensus_bitcoin_ng, rollback, [Height]),
-    io:fwrite(standard_io, "Rollback to height ~p complete~n", [Height]).
+    io:fwrite(standard_io, "Rollback to height ~p complete: ~p~n", [Height, Res]),
+    ok = rpc:call(Node, aeu_ext_scripts, activate_node, [Apps]),
+    ok.
 
 state_at_height(_Node, H, #{ top_height := TopHeight }) when H > TopHeight ->
     abort("Rollback height (~p) exceeds current top height (~p)", [H, TopHeight]);
 state_at_height(Node, H, St) ->
-    St1 = St#{ from => #{ height => H
-                        , header => header_by_height(Node, H) }}.
+    St#{ from => #{ height => H
+                  , header => header_by_height(Node, H) }}.
 
 abort(Str) ->
     abort(Str, []).
@@ -101,14 +105,14 @@ abort(Str, Args) ->
 %% height.
 %%
 whitelisted_starting_point(Node, W, TopHeight) ->
-    Sorted = lists:keysort(maps:to_list(W)),
+    Sorted = lists:keysort(1, maps:to_list(W)),
     whitelisted_starting_point_(Sorted, Node, TopHeight, undefined).
 
 whitelisted_starting_point_([{H, Hash}|T], Node, TopHeight, Sofar) when H < TopHeight ->
-    Hdr = header_by_height(H),
+    Hdr = header_by_height(Node, H),
     case aec_headers:hash_header(Hdr) of
         {ok, Hash} ->
-            whitelisted_starting_point(T, Node, TopHeight, {H, Hdr});
+            whitelisted_starting_point_(T, Node, TopHeight, {H, Hdr});
         _ when Sofar == undefined ->
             PrevH = H - 1,
             {PrevH, header_by_height(Node, PrevH)};

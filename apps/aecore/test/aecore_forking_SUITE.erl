@@ -19,7 +19,6 @@
     sync_fork_in_wrong_order/1,
     add_dev3_node/1,
     dev3_failed_attack/1,
-    dev3_syncs_to_community/1,
     whitelist_and_rollback/1
    ]).
 
@@ -39,7 +38,7 @@ all() ->
 
 groups() ->
     [
-     {all_nodes, [sequence], [{group, two_nodes}, {group, three_nodes}, {group, whitelist}]},
+     {all_nodes, [sequence], [{group, two_nodes}, {group, three_nodes}]},
      {two_nodes, [sequence],
       [create_dev1_chain,
        create_dev2_chain,
@@ -47,9 +46,7 @@ groups() ->
      {three_nodes, [sequence],
       [add_dev3_node,
        dev3_failed_attack,
-       dev3_syncs_to_community]},
-     {whitelist, [sequence],
-      [whitelist_and_rollback]}
+       whitelist_and_rollback]}
     ].
 
 suite() ->
@@ -86,8 +83,6 @@ init_per_group(_Group, Config) ->
 end_per_group(_Group, _Config) ->
     ok.
 
-init_per_testcase(dev3_syncs_to_community, _Config) ->
-    {skip, "Not yet implemented"};
 init_per_testcase(_Case, Config) ->
     ct:log("testcase pid: ~p", [self()]),
     [{tc_start, os:timestamp()}|Config].
@@ -269,26 +264,55 @@ dev3_failed_attack(Config) ->
     ok = stop_and_check([dev1, dev2, dev3], Config).
 
 whitelist_and_rollback(Config) ->
-    N1 = aecore_suite_utils:node_name(dev1),
+    %%
+    %% Start dev1 to produce a whitelist
+    %%
+    [N1, N2, _N3] = [aecore_suite_utils:node_name(N) || N <- [dev1, dev2, dev3]],
     aecore_suite_utils:start_node(dev1, Config),
     aecore_suite_utils:connect(N1),
-    TopHeight = rpc:call(N1, aec_chain, top_height, []),
-    ct:log("TopHeight on dev1: ~p", [TopHeight]),
+    N1Top = rpc:call(N1, aec_chain, top_height, []),
+    ct:log("TopHeight on dev1: ~p", [N1Top]),
     SetupHome = rpc:call(N1, setup, home, []),
     AeCmd = filename:join([SetupHome, "bin", "aeternity"]),
     ct:log("SetupHome = ~p", [SetupHome]),
     ct:log("AeCmd = ~p", [AeCmd]),
-    InitArgs = rpc:call(N1, init, get_arguments, []),
-    WLCmd = AeCmd ++ " create_whitelist -start 5 -n 10 -o wl.json",
+    {ok, N1Cwd} = rpc:call(N1, file, get_cwd, []),
+    WLCmd = AeCmd ++ " create_whitelist -start 5 -n 10 -o ./wl.json",
     ct:log("WLCmd = ~p", [WLCmd]),
     WhiteListRes = os:cmd(WLCmd, #{}),
-    os:cmd("WhiteListRes = ~p", [WhiteListRes]),
-    ct:log("InitArgs = ~p", [InitArgs]),
-    ok = stop_and_check([dev1], Config).
-
-dev3_syncs_to_community(_Config) ->
-    %% This has not yet been implemented
-    ok.
+    ct:log("WhiteListRes =~n"
+           "=========================================~n"
+           "~s~n"
+           "=========================================", [WhiteListRes]),
+    ok = stop_and_check([dev1], Config),
+    %%
+    %% Start dev2, which at this point should be on the evil dev3 fork
+    %%
+    WLFile = filename:join(N1Cwd, "wl.json"),
+    Env = [{"AE__SYNC__WHITELIST_FILE", WLFile}],
+    aecore_suite_utils:start_node(dev2, Config, Env),
+    aecore_suite_utils:connect(N2),
+    N2Top = rpc:call(N2, aec_chain, top_height, []),
+    true = N2Top > N1Top,
+    ct:log("N2Top = ~p, higher than N1Top (~p)", [N2Top, N1Top]),
+    ct:log("Whitelist:~n"
+           "~p", [rpc:call(N2, aec_consensus_bitcoin_ng, get_whitelist, [])]),
+    %% Prepare a call to the rollback script
+    N2SetupHome = rpc:call(N2, setup, home, []),
+    N2AeCmd = filename:join([N2SetupHome, "bin", "aeternity"]),
+    N2RBCmd = N2AeCmd ++ " db_rollback -w",
+    N2RBRes = os:cmd(N2RBCmd),
+    ct:log("N2RBRes =~n"
+           "=========================================~n"
+           "~s~n"
+           "=========================================", [N2RBRes]),
+    %%
+    %% dev2 should now be rolled back to a top below that of dev1's
+    %%
+    N2Top2 = rpc:call(N2, aec_chain, top_height, []),
+    ct:log("N2Top2 = ~p", [N2Top2]),
+    ok = stop_and_check([dev2], Config).
+    
 
 stop_and_check(Ns, Config) ->
     lists:foreach(
