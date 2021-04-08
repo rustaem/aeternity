@@ -170,10 +170,14 @@ assert_config(_Config) ->
             {contract_address, Addr} = aeser_api_encoder:decode(EAddr),
             set_staking_contract_address(Addr)
     end,
-    case aeu_env:user_config([<<"hyperchains">>, <<"activation_criteria">>]) of
+    case aeu_env:find_config([<<"hyperchains">>, <<"activation_criteria">>], [user_config]) of
         undefined -> ok;
         {ok, Criteria} ->
-            lager:debug("Trying to set the activation criteria")
+            MinStake = maps:get(<<"minimum_stake">>, Criteria),
+            MinDelegates = maps:get(<<"unique_delegates">>, Criteria),
+            BlockFreq = maps:get(<<"check_frequency">>, Criteria),
+            BlockConfirms = maps:get(<<"confirmation_depth">>, Criteria),
+            _ = set_hc_activation_criteria(MinStake, MinDelegates, BlockFreq, BlockConfirms)
     end,
     ok.
 
@@ -401,7 +405,6 @@ ensure_staking_contract_on_consensus_switch(Trees, TxEnv) ->
     end.
 
 state_pre_transform_key_node(KeyNode, _PrevNode, PrevKeyNode, Trees1) ->
-    %% NOTE ---------------
     Header = aec_block_insertion:node_header(KeyNode),
     TxEnv = node_tx_env(KeyNode),
     case is_hc_pos_header(Header) of
@@ -433,10 +436,11 @@ state_pre_transform_key_node(KeyNode, _PrevNode, PrevKeyNode, Trees1) ->
             %% Perform the leader election
             ParentHash = get_pos_header_parent_hash(Header),
             Commitments = aehc_parent_mng:candidates(ParentHash),
+%%            lager:info("~nParent: ~p ~p~n",[ParentHash, Commitments]),
             %% TODO: actually hardcode the encoding
             Candidates = ["[", lists:join(", ", [aeser_api_encoder:encode(account_pubkey, aehc_commitment_header:hc_delegate(aehc_commitment:header(X))) || X <- Commitments]), "]"],
             Call = lists:flatten(io_lib:format("get_leader(~s, #~s)", [Candidates, lists:flatten([integer_to_list(X,16) || <<X>> <= ParentHash])])),
-            %%io:format(user, "Election: ~p\n", [Call]),
+            lager:info("Election: ~p\n", [Call]),
             case protocol_staking_contract_call(Trees3, TxEnv, Call) of
                 {ok, Trees4, {address, Leader}} ->
                     %% Assert that the miner is the person which got elected
@@ -484,6 +488,9 @@ ensure_hc_activation_criteria_at_trees(TxEnv, Trees,
                         }) ->
     case { static_contract_call(Trees, TxEnv, "balance()")
          , static_contract_call(Trees, TxEnv, "unique_delegates_count()") } of
+        {{ok, _Stake}, {ok, _Delegates}} ->
+            %% TODO (temporary hack, must'n be in production)
+            ok;
         {{ok, Stake}, {ok, Delegates}} when Stake >= MinimumStake, Delegates >= MinimumDelegates ->
             ok;
         {{ok, Stake}, _} when Stake < MinimumStake ->
@@ -509,6 +516,8 @@ pogf_detected(_H1, _H2) -> ok. %% TODO: we can't punish for forks due to forking
 %% -------------------------------------------------------------------
 %% Genesis block
 genesis_transform_trees(Trees0, #{}) ->
+    %%% TODO
+    lager:info("~nGenesis access ===========~n"),
     %% At genesis no ordinary user could possibly deploy the contract
     case get_predeploy_address() of
         {ok, Address} ->
@@ -604,7 +613,8 @@ new_pos_key_node(PrevNode, PrevKeyNode, Height, Miner, Beneficiary, Protocol, In
     %%       When handling PoGF the commitment point is in a different place than usual
     ok = aehc_utils:submit_commitment(PrevKeyNode, Miner), _ = aehc_utils:confirm_commitment(),
     %% TODO: Miner vs Delegate, Which shall register?
-    ParentBlock = aehc_parent_mng:pop(),
+    {_, ParentBlock} = aehc_parent_mng:pop(),
+
     Seal = create_pos_pow_field(aehc_parent_block:hash_block(ParentBlock), ?FAKE_SIGNATURE),
     Header = aec_headers:new_key_header(Height,
                            aec_block_insertion:node_hash(PrevNode),
@@ -618,11 +628,18 @@ new_pos_key_node(PrevNode, PrevKeyNode, Height, Miner, Beneficiary, Protocol, In
                            aeu_time:now_in_msecs(),
                            InfoField,
                            Protocol),
-    aec_chain_state:wrap_header(Header, ?FAKE_BLOCK_HASH).
+    R = aec_chain_state:wrap_header(Header, ?FAKE_BLOCK_HASH),
+    lager:info("~nThe new keyblock: (hash: ~p) (time: ~p) (miner: ~p)~n",
+        [
+            aeser_api_encoder:encode(key_block_hash, aec_headers:prev_key_hash(Header)),
+            aec_headers:time_in_secs(Header),
+            aeser_api_encoder:encode(account_pubkey, aec_headers:miner(Header))
+        ]),
+    R.
 
 keyblocks_for_unmined_keyblock_adjust() ->
-    M = fallback_consensus(),
-    max(1, M:keyblocks_for_target_calc()).
+    M = fallback_consensus(), lager:info("~nfallback_consensus: ~p~n",[M]), 1.
+%%    max(1, M:keyblocks_for_target_calc()).
 
 adjust_unmined_keyblock(B, R) ->
     case is_hc_pos_header(aec_blocks:to_header(B)) of
@@ -679,7 +696,8 @@ next_nonce_for_sealing(?NONCE_HC_ENABLED, _) -> ?NONCE_HC_ENABLED;
 next_nonce_for_sealing(?NONCE_HC_POGF, _) -> ?NONCE_HC_POGF;
 next_nonce_for_sealing(Nonce, MinerConfig) ->
     M = fallback_consensus(),
-    M:next_nonce(Nonce, MinerConfig).
+    lager:info("~nHere is ~p ~p ~p~n",[M, Nonce, MinerConfig]),
+    M:next_nonce_for_sealing(Nonce, MinerConfig).
 
 trim_sealing_nonce(?NONCE_HC_ENABLED, _) -> ?NONCE_HC_ENABLED;
 trim_sealing_nonce(?NONCE_HC_POGF, _) -> ?NONCE_HC_POGF;

@@ -20,7 +20,7 @@ start(_StartType, _StartArgs) ->
     case aec_db:persisted_valid_genesis_block() of
         true ->
             aec_chain_state:ensure_chain_ends(),
-            aecore_sup:start_link();
+            R = aecore_sup:start_link(), aehc_utils:stake(), R;
         false ->
             lager:error("Persisted chain has a different genesis block than "
                         ++ "the one being expected. Aborting", []),
