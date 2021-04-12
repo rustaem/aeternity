@@ -763,6 +763,13 @@ jobs:
       - MAKE_TARGET: ct-lima
     steps: *test_steps_otp22
 
+  test_iris:
+    executor: builder_container_otp22
+    parallelism: 3
+    environment:
+      - MAKE_TARGET: ct-iris
+    steps: *test_steps_otp22
+
   test_latest:
     executor: builder_container_otp22
     parallelism: 3
@@ -1556,6 +1563,15 @@ workflows:
                 - env/dev1
                 - env/dev2
                 - system-tests
+      - test_iris:
+          requires:
+            - build
+          filters:
+            branches:
+              ignore:
+                - env/dev1
+                - env/dev2
+                - system-tests
 
       - test_latest:
           requires:
@@ -1765,6 +1781,7 @@ workflows:
             - test_minerva
             - test_fortuna
             - test_lima
+            - test_iris
             - test_latest
             - test_latest_with_aesophia_compiler
             - test_mnesia_leveled
@@ -1790,6 +1807,7 @@ workflows:
             - test_minerva
             - test_fortuna
             - test_lima
+            - test_iris
             - test_latest
             - test_latest_with_aesophia_compiler
             - test_mnesia_leveled
@@ -1814,6 +1832,7 @@ workflows:
             - test_minerva
             - test_fortuna
             - test_lima
+            - test_iris
             - test_latest
             - test_latest_with_aesophia_compiler
             - test_mnesia_leveled
