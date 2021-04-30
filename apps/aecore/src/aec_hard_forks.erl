@@ -99,15 +99,15 @@ protocols_from_network_id(<<"ae_mainnet">>) ->
      , ?MINERVA_PROTOCOL_VSN  => 47800
      , ?FORTUNA_PROTOCOL_VSN => 90800
      , ?LIMA_PROTOCOL_VSN => 161150
-     , ?IRIS_PROTOCOL_VSN =>  434300
+%%%  , ?IRIS_PROTOCOL_VSN =>  Not yet decided
 %%%  , ?CERES_PROTOCOL_VSN =>  Not yet decided
     };
 protocols_from_network_id(<<"ae_uat">>) ->
     #{ ?ROMA_PROTOCOL_VSN     => 0
      , ?MINERVA_PROTOCOL_VSN  => 40900
      , ?FORTUNA_PROTOCOL_VSN => 82900
-     , ?LIMA_PROTOCOL_VSN =>  154300
-%%%  , ?IRIS_PROTOCOL_VSN =>  Not yet decided
+     , ?LIMA_PROTOCOL_VSN => 154300
+     , ?IRIS_PROTOCOL_VSN => 425900
 %%%  , ?CERES_PROTOCOL_VSN =>  Not yet decided
      };
 protocols_from_network_id(<<"local_roma_testnet">>) ->
