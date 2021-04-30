@@ -107,7 +107,7 @@ protocols_from_network_id(<<"ae_uat">>) ->
      , ?MINERVA_PROTOCOL_VSN  => 40900
      , ?FORTUNA_PROTOCOL_VSN => 82900
      , ?LIMA_PROTOCOL_VSN => 154300
-     , ?IRIS_PROTOCOL_VSN => 425900
+%%%  , ?IRIS_PROTOCOL_VSN =>  Not yet decided
 %%%  , ?CERES_PROTOCOL_VSN =>  Not yet decided
      };
 protocols_from_network_id(<<"local_roma_testnet">>) ->
