@@ -73,7 +73,6 @@ hc_chain_eunit_testcase(Consensus, What) ->
     {foreach,
      fun() ->
              ok = application:ensure_started(gproc),
-             {ok, _} = aec_db_error_store:start_link(),
              aec_test_utils:start_chain_db(),
              %% somehow setup:find_env_vars can't find this hook in eunit tests
              aehc_db:create_tables(ram),
@@ -100,7 +99,6 @@ hc_chain_eunit_testcase(Consensus, What) ->
              meck:unload(aec_mining),
              meck:unload(aec_events),
              aec_test_utils:stop_chain_db(),
-             ok = aec_db_error_store:stop(),
              aec_test_utils:aec_keys_cleanup(TmpDir)
      end, What}])]).
 

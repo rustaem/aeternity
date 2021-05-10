@@ -84,7 +84,6 @@ init_per_testcase(_, Config) ->
     meck:expect(aehc_utils, hc_enabled, 0, true),
     meck:new(aehc_app, [passthrough]),
     meck:expect(aehc_app, trackers_config, 0, trackers_conf(?config(genesis_state, Config))),
-    {ok, _} = aec_db_error_store:start_link(),
     {ok, Pid} = aehc_sup:start_link(), true = is_pid(Pid),
     [{ok, _} = aehc_parent_mng:start_view(aehc_app:tracker_name(Conf), Conf) || Conf <- aehc_app:trackers_config()],
     [{pid, Pid}|Config].
@@ -92,8 +91,7 @@ init_per_testcase(_, Config) ->
 end_per_testcase(_, Config) ->
     %% aehc_parent_mng related mocks;
     meck:unload(aehc_app),
-    exit(?config(pid, Config), normal),
-    ok = aec_db_error_store:stop().
+    exit(?config(pid, Config), normal).
 
 %%--------------------------------------------------------------------
 %% TEST CASES
