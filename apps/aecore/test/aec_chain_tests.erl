@@ -661,57 +661,13 @@ forking_test_() ->
              teardown_meck_and_keys(TmpDir),
              aec_test_utils:stop_chain_db()
      end,
-     [ {"Fork on genesis", fun fork_on_genesis/0}
-     , {"Fork on shorter chain because of difficulty", fun fork_on_shorter/0}
-     , {"Fork on last block", fun fork_on_last_block/0}
-     , {"Get by height in forks", fun fork_get_by_height/0}
-     , {"Test if hash is in main chain", fun fork_is_in_main_chain/0}
-     , {"Get a transaction from the right fork", fun fork_get_transaction/0}
-     , {"Fork on micro-block", fun fork_on_micro_block/0}
-     , {"Fork on old fork point", fun fork_on_old_fork_point/0}]}.
-
-fork_on_genesis() ->
-    EasyChain = gen_blocks_only_chain_by_target([?GENESIS_TARGET, ?GENESIS_TARGET, 2, 2], 111),
-    HardChain = gen_blocks_only_chain_by_target([?GENESIS_TARGET, ?GENESIS_TARGET, 1, 1], 111),
-    fork_common(EasyChain, HardChain).
-
-fork_on_last_block() ->
-    CommonChain = gen_block_chain_with_state_by_target([?GENESIS_TARGET, ?GENESIS_TARGET, 1, 1], 111),
-    EasyChain = extend_chain_with_state(CommonChain, [2], 111),
-    HardChain = extend_chain_with_state(CommonChain, [1], 222),
-    fork_common(blocks_only_chain(EasyChain), blocks_only_chain(HardChain)).
-
-fork_on_shorter() ->
-    EasyChain = gen_blocks_only_chain_by_target([?GENESIS_TARGET, ?GENESIS_TARGET, 2, 2, 4], 111),
-    HardChain = gen_blocks_only_chain_by_target([?GENESIS_TARGET, ?GENESIS_TARGET, 1, 1], 111),
-    fork_common(EasyChain, HardChain).
-
-fork_common(EasyChain, HardChain) ->
-    TopHashEasy = block_hash(lists:last(EasyChain)),
-    TopHashHard = block_hash(lists:last(HardChain)),
-    %% Insert blocks
-    ok = fork_common_block(EasyChain, TopHashEasy, HardChain, TopHashHard),
-    ok.
-
-fork_common_block(EasyChain, TopHashEasy, HardChain, TopHashHard) ->
-    aec_db:clear_db(),
-    %% The second chain should take over
-    ok = write_blocks_to_chain(EasyChain),
-    ?assertEqual(TopHashEasy, top_block_hash()),
-    fork_test_chain_ends_and_migration([TopHashEasy], EasyChain),
-    ok = write_blocks_to_chain(HardChain),
-    ?assertEqual(TopHashHard, top_block_hash()),
-    fork_test_chain_ends_and_migration([TopHashEasy, TopHashHard], HardChain),
-
-    aec_db:clear_db(),
-    %% The second chain should not take over
-    ok = write_blocks_to_chain(HardChain),
-    ?assertEqual(TopHashHard, top_block_hash()),
-    fork_test_chain_ends_and_migration([TopHashHard], HardChain),
-    ok = write_blocks_to_chain(EasyChain),
-    ?assertEqual(TopHashHard, top_block_hash()),
-    fork_test_chain_ends_and_migration([TopHashEasy, TopHashHard], HardChain),
-    ok.
+     [
+        {"Get by height in forks", fun fork_get_by_height/0},
+        {"Test if hash is in main chain", fun fork_is_in_main_chain/0},
+        {"Get a transaction from the right fork", fun fork_get_transaction/0},
+        {"Fork on micro-block", fun fork_on_micro_block/0},
+        {"Fork on old fork point", fun fork_on_old_fork_point/0}
+     ]}.
 
 fork_test_chain_ends_and_migration(ExpectedTops, ExpectedBlocks) ->
     F = fun() -> ?assertEqual( lists:usort(ExpectedTops)
